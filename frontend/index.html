@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Regression Testing Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+        }
+        .log-window {
+            transition: all 0.3s ease;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .log-window.minimized {
+            height: 40px;
+            overflow: hidden;
+        }
+        .log-content {
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .priority-high {
+            background-color: #ef4444;
+            color: white;
+        }
+        .priority-medium {
+            background-color: #f59e0b;
+            color: white;
+        }
+        .priority-low {
+            background-color: #10b981;
+            color: white;
+        }
+        .status-pass {
+            background-color: #10b981;
+            color: white;
+        }
+        .status-fail {
+            background-color: #ef4444;
+            color: white;
+        }
+        .status-norun {
+            background-color: #6b7280;
+            color: white;
+        }
+        .blink {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        .shadow-lg {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .enterprise-card {
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+        .running-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #3b82f6;
+            margin-right: 5px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+            100% { transform: scale(0.95); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <!-- Login Screen -->
+    <div id="login-screen" class="fixed inset-0 flex items-center justify-center gradient-bg">
+        <div class="enterprise-card p-8 w-full max-w-md mx-4 shadow-lg">
+            <div class="flex justify-center mb-8">
+                <img src="logo.png" alt="Company Logo" class="h-20">
+            </div>
+            <h1 class="text-2xl font-bold text-center text-white mb-6">Enterprise Regression Testing</h1>
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-white mb-2">User ID</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-300"></i>
+                        </div>
+                        <input type="text" id="username" name="username" 
+                            class="w-full pl-10 pr-4 py-3 bg-white bg-opacity-10 border border-white border-opacity-20 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" 
+                            placeholder="Enter your user ID" required>
+                    </div>
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-white mb-2">Password</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-gray-300"></i>
+                        </div>
+                        <input type="password" id="password" name="password" 
+                            class="w-full pl-10 pr-4 py-3 bg-white bg-opacity-10 border border-white border-opacity-20 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" 
+                            placeholder="Enter your password" required>
+                    </div>
+                </div>
+                <div id="error-message" class="text-red-300 text-sm hidden">
+                    <i class="fas fa-exclamation-circle mr-1"></i> Invalid credentials. Please try again.
+                </div>
+                <div>
+                    <button type="submit" 
+                        class="w-full bg-white text-blue-600 py-3 px-4 rounded-lg font-medium hover:bg-opacity-90 transition duration-300 flex items-center justify-center">
+                        <i class="fas fa-sign-in-alt mr-2"></i> Login
+                    </button>
+                </div>
+            </form>
+            <div class="mt-6 text-center text-sm text-white text-opacity-70">
+                <p>For authorized personnel only. Unauthorized access prohibited.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard (hidden initially) -->
+    <div id="dashboard" class="hidden">
+        <!-- Header -->
+        <header class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex items-center">
+                <img src="logo.png" alt="Company Logo" class="h-12 mr-4">
+                <h1 class="text-2xl font-bold text-gray-900">Welcome to Regression Testing Dashboard</h1>
+                <div class="ml-auto">
+                    <button id="logout-btn" class="text-gray-600 hover:text-gray-900 flex items-center">
+                        <i class="fas fa-sign-out-alt mr-2"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row gap-6">
+                <!-- Test Cases Table (1/3 width) -->
+                <div id="test-cases-container" class="w-full lg:w-1/3 bg-white rounded-lg shadow overflow-hidden">
+                    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                        <h3 class="text-lg font-medium leading-6 text-gray-900">Test Scenarios</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SL</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Test Scenario</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Test Cases</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200" id="test-cases-body">
+                                <!-- Test cases will be dynamically added here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Log Windows Container (2/3 width, hidden initially) -->
+                <div id="log-container" class="hidden w-full lg:w-2/3 space-y-4">
+                    <!-- Log windows will be dynamically added here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Initialize test cases data
+        const testCases = [
+            { sl: 1, scenario: 'TS001', case: 'TC001', description: 'Run project 001', priority: 'High', status: 'No Run' },
+            { sl: 2, scenario: 'TS002', case: 'TC002', description: 'Run project 002', priority: 'Medium', status: 'No Run' },
+            { sl: 3, scenario: 'TS003', case: 'TC003', description: 'Run project 003', priority: 'Low', status: 'No Run' },
+            { sl: 4, scenario: 'TS004', case: 'TC004', description: 'Run project 004', priority: 'High', status: 'No Run' },
+            { sl: 5, scenario: 'TS005', case: 'TC005', description: 'Run project 005', priority: 'Medium', status: 'No Run' }
+        ];
+
+        // Login functionality
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('error-message');
+            
+            // Clear previous error
+            errorMessage.classList.add('hidden');
+            
+            // Validate credentials
+            if (username === 'admin' && password === 'password') {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                
+                // Load test cases
+                loadTestCases();
+            } else {
+                errorMessage.classList.remove('hidden');
+                document.getElementById('password').value = '';
+                document.getElementById('password').focus();
+            }
+        });
+
+        // Logout functionality
+        document.getElementById('logout-btn').addEventListener('click', function() {
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('error-message').classList.add('hidden');
+            
+            // Clear all log windows when logging out
+            document.getElementById('log-container').innerHTML = '';
+            document.getElementById('log-container').classList.add('hidden');
+            document.getElementById('test-cases-container').classList.remove('lg:w-1/3');
+            document.getElementById('test-cases-container').classList.add('w-full');
+        });
+
+        // Load test cases into the table
+        function loadTestCases() {
+            const tbody = document.getElementById('test-cases-body');
+            tbody.innerHTML = '';
+            
+            testCases.forEach(testCase => {
+                const tr = document.createElement('tr');
+                
+                // Priority dropdown
+                const prioritySelect = document.createElement('select');
+                prioritySelect.className = `priority-${testCase.priority.toLowerCase()} px-2 py-1 text-xs rounded-full border-none focus:ring-2 focus:ring-blue-500`;
+                prioritySelect.innerHTML = `
+                    <option value="High" ${testCase.priority === 'High' ? 'selected' : ''} class="priority-high">High</option>
+                    <option value="Medium" ${testCase.priority === 'Medium' ? 'selected' : ''} class="priority-medium">Medium</option>
+                    <option value="Low" ${testCase.priority === 'Low' ? 'selected' : ''} class="priority-low">Low</option>
+                `;
+                
+                // Status display (not editable, will be updated automatically)
+                const statusDisplay = document.createElement('div');
+                statusDisplay.className = `status-${testCase.status.toLowerCase().replace(' ', '')} px-2 py-1 text-xs rounded-full inline-block`;
+                statusDisplay.textContent = testCase.status;
+                
+                // Update class when priority changes
+                prioritySelect.addEventListener('change', function() {
+                    const value = this.value.toLowerCase();
+                    this.className = `priority-${value} px-2 py-1 text-xs rounded-full border-none focus:ring-2 focus:ring-blue-500`;
+                });
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${testCase.sl}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${testCase.scenario}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${testCase.case}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${testCase.description}</td>
+                    <td class="px-6 py-4 whitespace-nowrap"></td>
+                    <td class="px-6 py-4 whitespace-nowrap"></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <button class="execute-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center" data-testcase="${testCase.case}">
+                            <span class="running-indicator hidden"></span>
+                            Execute
+                        </button>
+                    </td>
+                `;
+                
+                // Add dropdown and status display to the cells
+                tr.querySelector('td:nth-child(5)').appendChild(prioritySelect);
+                tr.querySelector('td:nth-child(6)').appendChild(statusDisplay);
+                
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Execute button functionality
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('execute-btn') || e.target.closest('.execute-btn')) {
+                const btn = e.target.classList.contains('execute-btn') ? e.target : e.target.closest('.execute-btn');
+                const testCase = btn.getAttribute('data-testcase');
+                
+                // Show running indicator
+                const runningIndicator = btn.querySelector('.running-indicator');
+                runningIndicator.classList.remove('hidden');
+                btn.disabled = true;
+                
+                createLogWindow(testCase, btn);
+                
+                // Show log container and adjust widths
+                document.getElementById('log-container').classList.remove('hidden');
+                document.getElementById('test-cases-container').classList.remove('w-full');
+                document.getElementById('test-cases-container').classList.add('lg:w-1/3');
+            }
+            
+            // Minimize/maximize log window
+            if (e.target.classList.contains('minimize-btn') || e.target.closest('.minimize-btn')) {
+                const btn = e.target.classList.contains('minimize-btn') ? e.target : e.target.closest('.minimize-btn');
+                const logWindow = btn.closest('.log-window');
+                logWindow.classList.toggle('minimized');
+                
+                const icon = btn.querySelector('i');
+                if (logWindow.classList.contains('minimized')) {
+                    icon.classList.remove('fa-window-minimize');
+                    icon.classList.add('fa-window-maximize');
+                } else {
+                    icon.classList.remove('fa-window-maximize');
+                    icon.classList.add('fa-window-minimize');
+                }
+            }
+            
+            // Close log window
+            if (e.target.classList.contains('close-btn') || e.target.closest('.close-btn')) {
+                const btn = e.target.classList.contains('close-btn') ? e.target : e.target.closest('.close-btn');
+                const logWindow = btn.closest('.log-window');
+                logWindow.remove();
+                
+                // If no more log windows, hide the container and reset widths
+                if (document.querySelectorAll('.log-window').length === 0) {
+                    document.getElementById('log-container').classList.add('hidden');
+                    document.getElementById('test-cases-container').classList.remove('lg:w-1/3');
+                    document.getElementById('test-cases-container').classList.add('w-full');
+                }
+            }
+        });
+
+        // Create a new log window
+        function createLogWindow(testCase, executeBtn) {
+            // Check if window already exists
+            const existingWindow = document.querySelector(`.log-window[data-testcase="${testCase}"]`);
+            if (existingWindow) {
+                existingWindow.classList.remove('minimized');
+                existingWindow.scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+            
+            const logContainer = document.getElementById('log-container');
+            const logWindow = document.createElement('div');
+            logWindow.className = 'log-window bg-white rounded-lg shadow overflow-hidden';
+            logWindow.setAttribute('data-testcase', testCase);
+            
+            // Window header
+            const header = document.createElement('div');
+            header.className = 'px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50';
+            header.innerHTML = `
+                <h4 class="font-medium">Execution Log: ${testCase}</h4>
+                <div class="flex space-x-2">
+                    <button class="minimize-btn text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-window-minimize"></i>
+                    </button>
+                    <button class="close-btn text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            // Log content
+            const content = document.createElement('div');
+            content.className = 'log-content p-4';
+            
+            // Add blinking cursor to show it's active
+            const cursor = document.createElement('span');
+            cursor.className = 'blink';
+            cursor.textContent = '_';
+            
+            // Add to DOM
+            logWindow.appendChild(header);
+            logWindow.appendChild(content);
+            logContainer.appendChild(logWindow);
+            
+            // Scroll to the new window
+            logWindow.scrollIntoView({ behavior: 'smooth' });
+            
+            // Execute the test case
+            executeTestCase(testCase, content, cursor, executeBtn);
+        }
+
+        // Execute a test case by calling the backend API
+        async function executeTestCase(testCase, contentElement, cursorElement, executeBtn) {
+            // Clear previous content
+            contentElement.innerHTML = '';
+            
+            // Add initial message
+            const initialMsg = document.createElement('div');
+            initialMsg.textContent = `Starting execution of ${testCase}...\n`;
+            contentElement.appendChild(initialMsg);
+            
+            // Add cursor
+            contentElement.appendChild(cursorElement);
+            
+            // Scroll to bottom
+            contentElement.scrollTop = contentElement.scrollHeight;
+            
+            // Find the status display for this test case
+            const statusDisplay = executeBtn.closest('tr').querySelector('td:nth-child(6) div');
+            
+            // Map test case to batch file
+            const batchFileMap = {
+                'TC001': 'test1.bat',
+                'TC002': 'test2.bat',
+                'TC003': 'test3.bat',
+                'TC004': 'test4.bat',
+                'TC005': 'test5.bat'
+            };
+            const batchFile = batchFileMap[testCase] || 'unknown.bat';
+            
+            // Simulate delay for UI
+            setTimeout(async () => {
+                // Remove cursor temporarily
+                cursorElement.remove();
+                
+                // Add command being executed
+                const commandMsg = document.createElement('div');
+                commandMsg.textContent = `> Executing: ${batchFile}\n`;
+                contentElement.appendChild(commandMsg);
+                
+                // Scroll to bottom
+                contentElement.scrollTop = contentElement.scrollHeight;
+                
+                try {
+                    // Make API call to execute the batch file
+                    const response = await fetch('http://localhost:3001/execute', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ testCase })
+                    });
+                    const result = await response.json();
+                    
+                    // Add output
+                    const outputMsg = document.createElement('div');
+                    outputMsg.textContent = result.output + '\n';
+                    contentElement.appendChild(outputMsg);
+                    
+                    // Add completion message
+                    const completionMsg = document.createElement('div');
+                    completionMsg.textContent = `\nExecution of ${testCase} ${result.status.toLowerCase()}ed.\n`;
+                    contentElement.appendChild(completionMsg);
+                    
+                    // Add timestamp
+                    const timestamp = document.createElement('div');
+                    timestamp.className = 'text-gray-400 mt-2';
+                    timestamp.textContent = `[${new Date().toLocaleString()}]`;
+                    contentElement.appendChild(timestamp);
+                    
+                    // Add cursor back
+                    contentElement.appendChild(cursorElement);
+                    
+                    // Scroll to bottom
+                    contentElement.scrollTop = contentElement.scrollHeight;
+                    
+                    // Update status display
+                    statusDisplay.textContent = result.status;
+                    statusDisplay.className = `status-${result.status.toLowerCase()} px-2 py-1 text-xs rounded-full inline-block`;
+                    
+                } catch (error) {
+                    // Handle API errors
+                    const errorMsg = document.createElement('div');
+                    errorMsg.textContent = `Error: ${error.message}\n`;
+                    contentElement.appendChild(errorMsg);
+                    
+                    const completionMsg = document.createElement('div');
+                    completionMsg.textContent = `\nExecution of ${testCase} failed.\n`;
+                    contentElement.appendChild(completionMsg);
+                    
+                    const timestamp = document.createElement('div');
+                    timestamp.className = 'text-gray-400 mt-2';
+                    timestamp.textContent = `[${new Date().toLocaleString()}]`;
+                    contentElement.appendChild(timestamp);
+                    
+                    contentElement.appendChild(cursorElement);
+                    contentElement.scrollTop = contentElement.scrollHeight;
+                    
+                    statusDisplay.textContent = 'Fail';
+                    statusDisplay.className = `status-fail px-2 py-1 text-xs rounded-full inline-block`;
+                }
+                
+                // Hide running indicator and re-enable button
+                const runningIndicator = executeBtn.querySelector('.running-indicator');
+                runningIndicator.classList.add('hidden');
+                executeBtn.disabled = false;
+                
+            }, 500);
+        }
+    </script>
+</body>
+</html>

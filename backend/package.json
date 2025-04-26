@@ -1,0 +1,13 @@
+{
+    "name": "regression-testing-backend",
+    "version": "1.0.0",
+    "description": "Backend for regression testing dashboard",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {
+      "cors": "^2.8.5",
+      "express": "^4.19.2"
+    }
+  }
