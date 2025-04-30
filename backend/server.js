@@ -1,10 +1,7 @@
 const express = require('express');
-const { execFile } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const cors = require('cors');
-const util = require('util');
-
-const execFileAsync = util.promisify(execFile);
 
 const app = express();
 const port = 3001;
@@ -59,16 +56,51 @@ app.post('/execute', async (req, res) => {
 
     for (const batchFile of batchFiles) {
         const batchFilePath = path.join(testDir, batchFile);
+        
+        // Add folder path before execution
+        results.push({
+            testCase: Object.keys(batchFileMap).find(key => batchFileMap[key] === batchFile) || batchFile,
+            success: true,
+            folderPath: batchFilePath,
+            output: `Batch file location: ${batchFilePath}`,
+            status: 'Pending'
+        });
+
         try {
-            const { stdout, stderr } = await execFileAsync(batchFilePath, [], { shell: true });
-            const output = stdout + stderr;
-            const isOutputValid = output.trim().toLowerCase() === 'hello world';
-            const status = isOutputValid && !stderr ? 'Pass' : 'Fail';
+            let output = '';
+            let errorOutput = '';
+
+            // Use spawn to execute the batch file
+            const child = spawn(batchFilePath, [], { shell: true });
+
+            // Capture stdout
+            child.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+
+            // Capture stderr
+            child.stderr.on('data', (data) => {
+                errorOutput += data.toString();
+            });
+
+            // Handle process completion
+            const exitCode = await new Promise((resolve, reject) => {
+                child.on('close', (code) => {
+                    resolve(code);
+                });
+                child.on('error', (err) => {
+                    reject(err);
+                });
+            });
+
+            const combinedOutput = output + errorOutput;
+            const isOutputValid = combinedOutput.trim().toLowerCase() === 'hello world';
+            const status = isOutputValid && !errorOutput && exitCode === 0 ? 'Pass' : 'Fail';
 
             results.push({
                 testCase: Object.keys(batchFileMap).find(key => batchFileMap[key] === batchFile) || batchFile,
-                success: true,
-                output: output,
+                success: exitCode === 0,
+                output: combinedOutput || 'No output',
                 status: status
             });
         } catch (error) {
