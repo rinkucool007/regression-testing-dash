@@ -642,6 +642,22 @@
             };
             const batchFile = isRunAll ? 'all tests' : batchFileMap[testCase] || 'unknown.bat';
             
+            // Validate batch file extension
+            if (!isRunAll && !batchFile.endsWith('.bat')) {
+                console.error('[ERROR] Invalid batch file extension for test case:', testCase, 'File:', batchFile);
+                const errorMsg = document.createElement('div');
+                errorMsg.textContent = `Error: Invalid batch file extension (${batchFile}). Expected .bat\n`;
+                contentElement.appendChild(errorMsg);
+                contentElement.appendChild(cursorElement);
+                contentElement.scrollTop = contentElement.scrollHeight;
+                const runningIndicator = executeBtn.querySelector('.running-indicator');
+                runningIndicator.classList.add('hidden');
+                executeBtn.disabled = false;
+                return;
+            }
+            
+            console.log('[DEBUG] Batch file mapped:', batchFile);
+            
             setTimeout(async () => {
                 cursorElement.remove();
                 
@@ -652,6 +668,7 @@
                 contentElement.scrollTop = contentElement.scrollHeight;
                 
                 try {
+                    console.log('[DEBUG] Sending fetch request to:', API_URL, 'with payload:', JSON.stringify({ testCase: isRunAll ? 'ALL' : testCase }));
                     const response = await fetch(API_URL, {
                         method: 'POST',
                         headers: {
@@ -659,37 +676,52 @@
                         },
                         body: JSON.stringify({ testCase: isRunAll ? 'ALL' : testCase })
                     });
+                    
+                    console.log('[DEBUG] Fetch response status:', response.status, 'OK:', response.ok);
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('[ERROR] Fetch failed with status:', response.status, 'Response:', errorText);
+                        throw new Error(`HTTP ${response.status}: ${errorText || 'Unknown error'}`);
+                    }
+                    
                     const result = await response.json();
+                    console.log('[DEBUG] Fetch response data:', result);
                     
                     if (!result.success) {
-                        throw new Error(result.output || 'Unknown error');
+                        console.error('[ERROR] Backend reported failure:', result.output);
+                        throw new Error(result.output || 'Backend execution failed');
                     }
                     
                     result.results.forEach(res => {
                         const testCaseId = res.testCase;
                         const outputMsg = document.createElement('div');
-                        outputMsg.textContent = `Test ${testCaseId}:\n${res.output}\n`;
-                        contentElement.appendChild(outputMsg);
                         
-                        const completionMsg = document.createElement('div');
-                        completionMsg.textContent = `Execution of ${testCaseId} ${res.status.toLowerCase()}ed.\n`;
-                        contentElement.appendChild(completionMsg);
-                        
-                        contentElement.scrollTop = contentElement.scrollHeight;
-                        
-                        let statusDisplay = null;
-                        const rows = document.querySelectorAll('#test-cases-body tr');
-                        for (const row of rows) {
-                            const testCaseCell = row.querySelector('td:nth-child(3)');
-                            if (testCaseCell && testCaseCell.textContent === testCaseId) {
-                                statusDisplay = row.querySelector('td:nth-child(6) div');
-                                break;
+                        // Display folder path if provided
+                        if (res.folderPath && res.status === 'Pending') {
+                            outputMsg.textContent = `Test ${testCaseId}:\n${res.output}\n`;
+                        } else {
+                            outputMsg.textContent = `Test ${testCaseId}:\n${res.output}\n`;
+                            const completionMsg = document.createElement('div');
+                            completionMsg.textContent = `Execution of ${testCaseId} ${res.status.toLowerCase()}ed.\n`;
+                            contentElement.appendChild(completionMsg);
+                            
+                            let statusDisplay = null;
+                            const rows = document.querySelectorAll('#test-cases-body tr');
+                            for (const row of rows) {
+                                const testCaseCell = row.querySelector('td:nth-child(3)');
+                                if (testCaseCell && testCaseCell.textContent === testCaseId) {
+                                    statusDisplay = row.querySelector('td:nth-child(6) div');
+                                    break;
+                                }
+                            }
+                            if (statusDisplay) {
+                                statusDisplay.textContent = res.status;
+                                statusDisplay.className = `status-${res.status.toLowerCase()} px-2 py-1 text-xs rounded-full inline-block`;
                             }
                         }
-                        if (statusDisplay) {
-                            statusDisplay.textContent = res.status;
-                            statusDisplay.className = `status-${res.status.toLowerCase()} px-2 py-1 text-xs rounded-full inline-block`;
-                        }
+                        
+                        contentElement.appendChild(outputMsg);
+                        contentElement.scrollTop = contentElement.scrollHeight;
                     });
                     
                     const timestamp = document.createElement('div');
@@ -701,6 +733,7 @@
                     contentElement.scrollTop = contentElement.scrollHeight;
                     
                 } catch (error) {
+                    console.error('[ERROR] Execution error for test case:', testCase, 'Error:', error.message);
                     const errorMsg = document.createElement('div');
                     errorMsg.textContent = `Error: ${error.message}\n`;
                     contentElement.appendChild(errorMsg);
